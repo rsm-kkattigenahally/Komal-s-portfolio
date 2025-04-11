@@ -1,0 +1,14 @@
+---
+title: "Komal Nagaraj"
+image: "files/DSC03069.jpg"
+about:
+  template: jolla
+  links:
+    - icon: envelope
+      href: mailto:kkattigenahally@ucsd.edu
+    - icon: linkedin
+      href: https://www.linkedin.com/in/komal-nagaraj-683344173/
+---
+
+Welcome to my website!
+Professional Software Engineer with 3 years of experience in Python, SQL, Software Automation in Agile Software Development. Actively seeking opportunities in Data Analytics/ Data Science positions.
