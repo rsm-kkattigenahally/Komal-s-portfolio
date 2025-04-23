@@ -1,26 +1,26 @@
 {
-    "id": "FED0BD5F",
-    "path": "~/Komal's Portfolio/index.qmd",
-    "project_path": "index.qmd",
+    "id": "E6D67A98",
+    "path": "~/Komal's Portfolio/projects/project1/index.qmd",
+    "project_path": "projects/project1/index.qmd",
     "type": "quarto_markdown",
     "hash": "0",
     "contents": "",
     "dirty": false,
-    "created": 1744224901123.0,
+    "created": 1745439379860.0,
     "source_on_save": false,
-    "relative_order": 1,
+    "relative_order": 6,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "10,3",
-        "scrollLine": "0"
+        "cursorPosition": "13,0",
+        "scrollLine": "2"
     },
     "folds": "",
-    "lastKnownWriteTime": 1744264630,
+    "lastKnownWriteTime": 1744225784,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1744264630787,
+    "last_content_update": 1744225784,
     "read_only": false,
     "read_only_alternatives": []
 }
