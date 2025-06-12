@@ -1,5 +1,5 @@
 ---
-title: "MLE and COnjoint Analysis"
+title: "MLE and Conjoint Analysis"
 author: "Komal Nagaraj"
 date: today
 ---

@@ -1,0 +1,527 @@
+---
+title: "Latent class MNL and KNN"
+author: "Komal Kattigenahally"
+date: today
+jupyter: python3
+---
+
+
+
+## Latent-Class MNL
+
+In this project, we will create a latent class MNL for a Yogurt purchase data. 
+The Latent Class Multinomial Logit (LC-MNL) model is an extension of the standard Multinomial Logit (MNL) model that captures unobserved heterogeneity in individual decision-making. While the MNL model assumes all individuals share the same preferences, the LC-MNL model allows for the population to consist of several latent (hidden) segments or classes, each with distinct choice behaviors.
+
+### Utility Specification
+
+Let the utility that individual $n$ obtains from choosing alternative $j$ in class $s$ be:
+
+$$
+U_{nj}^{(s)} = X_{nj}'\beta_s + \varepsilon_{nj}
+$$
+
+Where:
+
+- $X_{nj}$ is the vector of observed attributes of the alternative  
+- $\beta_s$ is the class-specific coefficient vector  
+- $\varepsilon_{nj}$ is a random error term  
+
+The probability that an individual belongs to class $s$ is denoted $\pi_s$, such that:
+
+$$
+\sum_{s=1}^{S} \pi_s = 1
+$$
+
+The choice probability for individual $n$ choosing alternative $j$, marginalizing over classes, is:
+
+$$
+P_{nj} = \sum_{s=1}^{S} \pi_s \cdot \frac{\exp(X_{nj}'\beta_s)}{\sum_{k=1}^{J} \exp(X_{nk}'\beta_s)}
+$$
+
+
+In the standard Multinomial Logit (MNL) model, Alternative-Specific Constants (ASCs) are included to account for the inherent preference for each product that is not explained by observable attributes such as price or featured status. These constants capture baseline utility differences between alternatives.
+
+Mathematically, the utility of individual $n$ choosing alternative $j$ can be written as:
+
+$$
+U_{nj} = ASC_j + \beta_1 \cdot \text{price}_{nj} + \beta_2 \cdot \text{featured}_{nj} + \varepsilon_{nj}
+$$
+
+
+Where $ASC_j$ is the alternative-specific constant for product $j$. One of the ASCs (typically for the base category) is omitted to avoid perfect multicollinearity. The remaining ASCs indicate how much more or less preferred each alternative is compared to the base product, holding all else equal.
+
+#### Yogurt latent class MNL
+In the Yogurt dataset that we have, anonymized consumer identifiers (`id`), a vector indicating the chosen product (`y1`:`y4`), a vector indicating if any products were "featured" in the store as a form of advertising (`f1`:`f4`), and the products' prices in price-per-ounce (`p1`:`p4`). For example, consumer 1 purchased yogurt 4 at a price of 0.079/oz and none of the yogurts were featured/advertised at the time of consumer 1's purchase.
+
+Data preview - 
+
+
+```{python}
+import pandas as pd
+
+yogurt_data = pd.read_csv('yogurt_data.csv')
+yogurt_data.head(10)
+
+```
+
+We will first reshape this dataset from wide to long format
+
+```{python}
+## Reshape dataset 
+yogurt_data = pd.wide_to_long(yogurt_data,
+                          stubnames=['y', 'f', 'p'],
+                          i='id',
+                          j='product',
+                          sep='',
+                          suffix='[1-4]').reset_index()
+
+# Rename columns for clarity
+yogurt_data = yogurt_data.rename(columns={
+    'y': 'chosen',
+    'f': 'featured',
+    'p': 'price'
+})
+yogurt_data.head(10)
+```
+
+In the above reshaped data, each row represents a consumer–product combination with with data about if the product was chosen by the consumer, if the product was featured abd the price per ounce for that product.
+
+
+### Standard MNL on Yogurt data
+Here we will fit a standard MNL model on the reshaped dataset. When fitting the MNL model in Python using libraries like statsmodels, the ASCs are not automatically created from a categorical variable like product. Therefore, we manually create dummy variables for alternatives using one-hot encoding. The process are as follows - 
+
+1. One-hot encode the product variable: This converts the product IDs into binary variables. We drop one column (e.g., for product 1) to act as the reference category.
+
+These dummy variables become our ASCs. They allow the model to capture each product's inherent preference or appeal that isn't explained by price or promotion. Without ASCs, the model would wrongly assume all products are equally preferred when price and promotion are the same.
+
+2. Merge dummies into the dataset: After encoding, we merge these dummy columns with the dataset so that they can be used as predictors in the model.
+
+Below we see the code to carry out the above steps.
+
+```{python}
+import statsmodels.api as sm
+from sklearn.preprocessing import OneHotEncoder
+
+encoder = OneHotEncoder(drop='first', sparse_output=False)
+product_dummies = encoder.fit_transform(yogurt_data[['product']])
+
+# Create DataFrame with appropriate column names
+product_dummies_df = pd.DataFrame(product_dummies, columns=encoder.get_feature_names_out())
+
+# Merge dummies with main data
+yogurt_data = pd.concat([yogurt_data.reset_index(drop=True), product_dummies_df.reset_index(drop=True)], axis=1)
+product_dummies_df
+
+# Define independent variables (price, featured, and ASCs)
+X = yogurt_data[['price', 'featured'] + list(product_dummies_df.columns)]
+X = sm.add_constant(X)  # Add intercept
+X
+
+```
+The independent variables for the model includes:
+
+- price: price per ounce
+
+- featured: whether the product was promoted
+
+- product_2, product_3, product_4: dummy variables representing ASCs for products 2, 3, and 4 (product 1 is the reference)
+
+```{python}
+# Dependent variable: whether the product was chosen (1 if chosen, 0 otherwise)
+y = yogurt_data['chosen']
+y
+```
+The above data is our dependent variable.
+
+```{python}
+
+# Fit the Multinomial Logit model
+model = sm.MNLogit(y, X)
+result = model.fit()
+
+# Show model summary
+result.summary()
+```
+
+From the above summary we see, that
+
+- Price has a very strong negative effect on the choice. Even a small increase in price substantially  reduced the choice probability.
+
+- Featured promotions positively impact the consumer decision. This effect is small.
+
+- Product 1 is the most preferred product and Product 2 is least preferred.
+
+### Latent class MNL model on Yogurt dataset
+Next, we will fit a Latent-class MNL on the same data.
+
+
+```{python}
+import numpy as np
+import biogeme.database as db
+import biogeme.biogeme as bio
+from biogeme.expressions import Beta, log, exp
+from biogeme import models
+
+def lc_mnl(K, df):
+    database = db.Database("yogurt", df)
+    database.variables['Choice'] = df['chosen']
+    av = {1: 1, 2: 1, 3: 1, 4: 1}
+
+    class_utilities = []
+    membership_betas = []
+
+    for k in range(1, K + 1):
+        ASC2 = Beta(f'ASC2_class{k}', 0, None, None, 0)
+        ASC3 = Beta(f'ASC3_class{k}', 0, None, None, 0)
+        ASC4 = Beta(f'ASC4_class{k}', 0, None, None, 0)
+        B_PRICE = Beta(f'B_PRICE_class{k}', 0, None, None, 0)
+        B_FEAT = Beta(f'B_FEAT_class{k}', 0, None, None, 0)
+
+        V = {
+            1: 0,
+            2: ASC2 + B_PRICE * database.variables['price'] + B_FEAT * database.variables['featured'],
+            3: ASC3 + B_PRICE * database.variables['price'] + B_FEAT * database.variables['featured'],
+            4: ASC4 + B_PRICE * database.variables['price'] + B_FEAT * database.variables['featured']
+        }
+
+        logprob = models.loglogit(V, av, database.variables['product'])
+        class_utilities.append(logprob)
+
+        if k < K:
+            pi_k = Beta(f'PI_{k}', 1.0 / K, 0.0001, 0.9999, 0)
+            membership_betas.append(pi_k)
+
+    if K == 2:
+        PI = [membership_betas[0], 1 - membership_betas[0]]
+    else:
+        exp_terms = [exp(beta) for beta in membership_betas]
+        denominator = sum(exp_terms) + 1
+        PI = [term / denominator for term in exp_terms]
+        PI.append(1 - sum(PI))
+
+    loglikelihood = log(sum([PI[k] * exp(class_utilities[k]) for k in range(K)]))
+    biogeme_model = bio.BIOGEME(database, loglikelihood)
+    biogeme_model.modelName = f"LC_MNL_{K}classes"
+    results = biogeme_model.estimate()
+
+    return {
+        "K": K,
+        "LogLikelihood": results.data.logLike,
+        "NumParams": results.data.nparam,
+        "BIC": -2 * results.data.logLike + results.data.nparam * np.log(df['id'].nunique()),
+        "Parameters": results.get_estimated_parameters()
+    }
+
+
+```
+To determine the optimal number of latent classes, we estimate LC-MNL models for 2, 3, 4, and 5 classes and compare them using the Bayesian Information Criterion (BIC) given by :
+
+$BIC = -2*\ell_n  + k*log(n)$? 
+
+(where $\ell_n$ is the log-likelihood, $n$ is the sample size, and $k$ is the number of parameters.) 
+
+BIC is a widely used tool for comparing models in terms of both their fit and parsimony. Unlike the raw log-likelihood, which only measures how well a model explains the data, the BIC includes a penalty for model complexity—specifically, the number of estimated parameters. This ensures that adding more classes (which almost always improves fit) is only favored if the improvement is substantial enough to justify the added complexity.
+
+In the context of the LC-MNL model, BIC allows us to determine the optimal number of latent classes. Each additional class introduces its own set of parameters (utility coefficients and class probabilities), which can risk overfitting if not justified by significant gains in likelihood.
+
+```{python}
+results_list = []
+for K in range(2, 6):
+    print(f"Estimating model for {K} classes...")
+    res = lc_mnl(K, yogurt_data)
+    results_list.append(res)
+    #print(f"Estimated parameters for K = {K}:")
+    #print(res["Parameters"])
+
+bic_df = pd.DataFrame(results_list).sort_values(by='BIC')
+
+```
+
+```{python}
+bic_df[['K', 'LogLikelihood', 'NumParams', 'BIC']]
+```
+The model with the lowest BIC is selected as the best-fitting model when balancing accuracy and simplicity. In our results, the 3-class model had the lowest BIC, suggesting that it best explains the data while avoiding unnecessary complexity.
+
+#### Comparison of Aggregate MNL vs. Latent-Class MNL (K = 3)
+
+Now we compare the parameter estimates between (1) the aggregate MNL, and (2) the latent-class MNL with the number of classes suggested by the BIC.
+
+```{python}
+lc_mnl_3class_params = results_list[[res["K"] for res in results_list].index(3)]["Parameters"].reset_index()
+lc_mnl_3class_params.columns
+class3_params = lc_mnl_3class_params.loc[lc_mnl_3class_params['index'].str.contains('_class3')]
+print("Class 3 parameter estimates")
+print(class3_params)
+```
+
+
+#### 1. Price Sensitivity
+
+| Model            | Price Coefficient        | Interpretation                                                |
+|------------------|--------------------------|----------------------------------------------------------------|
+| Aggregate MNL    | –31.98 (significant)     | Consumers are price-sensitive overall.                         |
+| LC-MNL Class 1   | –3317.95 (not significant) | Very large, likely unstable estimate.                          |
+| LC-MNL Class 2   | –2799.99 (**significant**) | Very strong price aversion.                                    |
+| LC-MNL Class 3   | +9678.82 (**significant**) | Counterintuitive: price increases utility (possible overfitting or perceived quality). |
+
+---
+
+#### 2. Featured Promotion
+
+| Model            | Featured Coefficient      | Interpretation                                               |
+|------------------|---------------------------|---------------------------------------------------------------|
+| Aggregate MNL    | +0.471 (significant)       | Promotion increases likelihood of choice.                    |
+| LC-MNL Class 1   | +13.75 (significant)       | Strong positive impact of being featured.                    |
+| LC-MNL Class 2   | +19.73 (significant)       | Even stronger promotional effect.                            |
+| LC-MNL Class 3   | –613.93 (significant)      | Strong negative effect — promotions deter choice.            |
+
+---
+
+#### 3. Alternative-Specific Constants (ASCs)
+
+| Product | Aggregate MNL | LC Class 1 | LC Class 2 | LC Class 3 |
+|---------|----------------|------------|------------|------------|
+| ASC2    | –0.5166         | –1.02       | +280.04     | –605.01     |
+| ASC3    | –4.5584         | +222.88     | +0.86       | –609.28     |
+| ASC4    | –1.4179         | –2.92       | +279.78     | –604.22     |
+
+Interpretation:
+- LC-MNL reveals stark contrasts between classes.
+- Class 2 prefers all products highly.
+- Class 3 strongly disfavors all alternatives — unusual, possibly unstable.
+
+---
+
+#### 4. Class Membership Probabilities
+
+| Class    | Share (PI) | Interpretation                                       |
+|----------|------------|------------------------------------------------------|
+| Class 1  | 0.730       | Majority: strong effects for price and promotion.   |
+| Class 2  | 0.999       | Possibly absorbing similar behavior as Class 1.     |
+| Class 3  | ~0          | Tiny segment with extreme (and conflicting) effects.|
+
+---
+
+#### **Conclusion**
+
+The aggregate MNL provides a stable average picture of consumer behavior: moderate price sensitivity and positive reaction to promotions.
+
+However, the 3-class LC-MNL uncovers **rich heterogeneity**:
+- **Class 1** behaves similarly to the aggregate trend.
+- **Class 2** intensifies the promotional impact.
+- **Class 3** behaves unusually, disliking promotions and favoring higher prices — likely capturing edge cases or requiring more robust modeling.
+
+Latent class modeling yields **deeper behavioral insights** that would be hidden in an aggregate approach — but demands careful interpretation, especially for small or extreme segments.
+
+
+## K Nearest Neighbors
+
+### How KNN Works
+Given a data point $x_{\text{test}}$ to classify:
+
+1. Compute the **distance** between $x_{\text{test}}$ and all training points $x_i$.
+2. Identify the $k$ closest training points (called the **k-nearest neighbors**).
+3. Assign the **majority class** label among those $k$ neighbors to $x_{\text{test}}$.
+
+---
+
+### Euclidean Distance
+
+The most commonly used distance metric is the **Euclidean distance**, defined for two points 
+$x = (x_1, x_2, \dots, x_d)$ and $z = (z_1, z_2, \dots, z_d)$ as:
+
+$$
+d(x, z) = \sqrt{(x_1 - z_1)^2 + (x_2 - z_2)^2 + \cdots + (x_d - z_d)^2}
+$$
+
+For our 2D case with features $x_1$ and $x_2$:
+
+$$
+d((x_1, x_2), (z_1, z_2)) = \sqrt{(x_1 - z_1)^2 + (x_2 - z_2)^2}
+$$
+
+---
+
+### Classification Rule
+
+Let $\mathcal{N}_k(x)$ denote the set of indices of the $k$ nearest neighbors of point $x$.  
+Then the predicted class $\hat{y}$ is:
+
+$$
+\hat{y} = \arg\max_{c \in \{0,1\}} \sum_{i \in \mathcal{N}_k(x)} \mathbb{1}(y_i = c)
+$$
+
+Where:
+- $\mathbb{1}(y_i = c)$ is an indicator function (1 if true, 0 if false),
+- This counts how many of the $k$ neighbors belong to class $c$,
+- The class with the highest count becomes the predicted class.
+
+---
+
+### Choosing the Right k
+
+- Small $k$ values (like $k=1$) can be sensitive to noise and may overfit.
+- Larger $k$ values smooth out the decision boundary but may underfit.
+- The optimal $k$ is usually chosen using validation data or cross-validation.
+
+---
+
+
+In this section, we will explore how the K Nearest Neighbors (KNN) algorithm works using a synthetic dataset. We will implement KNN from scratch, compare it with a built-in classifier, and analyze how the value of k impacts model accuracy.
+
+### Generate Synthetic Data
+The following code will generate a synthetic dataset for the k-nearest neighbors algorithm.  The code generates a dataset with two features, `x1` and `x2`, and a binary outcome variable `y` that is determined by whether `x2` is above or below a wiggly boundary defined by a sin function
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Generate data
+np.random.seed(42)
+n = 100
+x1 = np.random.uniform(-3, 3, n)
+x2 = np.random.uniform(-3, 3, n)
+
+boundary = np.sin(4 * x1) + x1
+y = (x2 > boundary).astype(int)
+
+df = pd.DataFrame({'x1': x1, 'x2': x2, 'y': y})
+df
+```
+
+We can visualize the dataset in 2D, using color to represent the binary class (y). We also overlay the wiggly boundary that separates the two classes.
+
+```{python}
+plt.figure(figsize=(8,6))
+plt.scatter(df['x1'], df['x2'], c=df['y'], cmap='bwr', edgecolor='k')
+x_line = np.linspace(-3, 3, 500)
+boundary_line = np.sin(4 * x_line) + x_line
+plt.plot(x_line, boundary_line, 'k--', label='Boundary')
+plt.xlabel('x1')
+plt.ylabel('x2')
+plt.title('Synthetic Dataset')
+plt.legend()
+plt.show()
+
+```
+
+To evaluate the generalization performance of our model, we create a new test dataset using a different random seed. This ensures the test data is independent of the training set.
+
+```{python}
+np.random.seed(19)  # different seed
+x1_test = np.random.uniform(-3, 3, n)
+x2_test = np.random.uniform(-3, 3, n)
+boundary_test = np.sin(4 * x1_test) + x1_test
+y_test = (x2_test > boundary_test).astype(int)
+
+test_df = pd.DataFrame({'x1': x1_test, 'x2': x2_test, 'y': y_test})
+test_df
+```
+
+### KNN implementation by hand Vs KNeighborsClassifier
+Here we define a custom KNN classifier using the Euclidean distance between test and training points. For each test instance, the k closest neighbors are selected, and the predicted class is determined by majority vote.
+
+
+```{python}
+import numpy as np
+from scipy.spatial import distance
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+
+def knn_predict(X_train, y_train, X_test, k):
+    y_pred = []
+    for test_point in X_test:
+        dists = [distance.euclidean(test_point, train_point) for train_point in X_train]
+        knn_indices = np.argsort(dists)[:k]
+        knn_labels = y_train[knn_indices]
+        # Use np.bincount safely: labels must be integers starting from 0
+        # If labels are 0 and 1, this is fine
+        majority_vote = np.argmax(np.bincount(knn_labels))
+        y_pred.append(majority_vote)
+    return np.array(y_pred)
+
+# Prepare train and test datasets
+X_train = df[['x1', 'x2']].values
+y_train = df['y'].values.astype(int)  # convert to int
+X_test = test_df[['x1', 'x2']].values
+y_test = test_df['y'].values.astype(int)  # convert to int
+
+# Convert y arrays to numpy integer arrays if needed
+y_train = np.array(y_train).astype(int)
+y_test = np.array(y_test).astype(int)
+
+# Built-in KNN classifier
+clf = KNeighborsClassifier(n_neighbors=5)
+clf.fit(X_train, y_train)
+y_lib_pred = clf.predict(X_test)
+
+# Your manual KNN prediction
+y_hand_pred = knn_predict(X_train, y_train, X_test, k=5)
+
+# Compare predictions
+print("Hand-coded KNN accuracy:", accuracy_score(y_test, y_hand_pred))
+print("Library KNN accuracy:   ", accuracy_score(y_test, y_lib_pred))
+
+
+```
+
+Now we run our custom KNN function across a range of k values (from 1 to 30) to observe how accuracy varies. This helps us identify the optimal value of k that balances underfitting and overfitting.
+
+```{python}
+from sklearn.metrics import accuracy_score
+
+X_train = df[['x1', 'x2']].values
+y_train = df['y'].values
+X_test = test_df[['x1', 'x2']].values
+y_test = test_df['y'].values
+
+accuracies = []
+
+for k in range(1, 31):
+    y_pred = knn_predict(X_train, y_train, X_test, k)
+    acc = accuracy_score(y_test, y_pred)
+    accuracies.append(acc * 100)
+
+```
+
+We plot the accuracy of the KNN model as a function of k to visualize the trend and identify the best k value.
+
+```{python}
+plt.figure(figsize=(8,5))
+plt.plot(range(1, 31), accuracies, marker='o')
+plt.xlabel('k')
+plt.ylabel('Accuracy (%)')
+plt.title('KNN Accuracy on Test Data')
+plt.grid(True)
+plt.show()
+
+optimal_k = np.argmax(accuracies) + 1
+print(f"Optimal k: {optimal_k} with accuracy: {accuracies[optimal_k-1]:.2f}%")
+
+```
+
+
+**Inference from the plot the accuracy of the KNN model as a function of k**
+
+- **Highest Accuracy at \( k = 1 \)** : The model achieves its **highest accuracy (~92%)** when \( k = 1 \).
+
+
+- **Sharp Drop from \( k = 2 \) to \( k = 4 \)** :  Accuracy declines quickly from ~90% to around 86–87% when \( k \) increases from 2 to 4.
+
+
+- **Fluctuations Between \( k = 5 \) and \( k = 15 \)** :  Accuracy fluctuates without a clear upward or downward trend. This suggests that the model struggles to capture a consistently optimal decision boundary in this range.
+
+
+- **Plateau After \( k \geq 15 \)** : For values of \( k \geq 15 \), accuracy stabilizes around **85–86%**. This trend reflects **underfitting**, where the model becomes too smooth and loses its ability to separate complex patterns in the data.
+
+
+- **Optimal Trade-off**:  While \( k = 1 \) yields the best test performance, using a slightly higher \( k \) (e.g., \( k = 3 \) or \( k = 5 \)) may provide a better **bias-variance trade-off**. This reduces the risk of overfitting while maintaining high accuracy.
+
+- **Summary :**
+
+- **Best test accuracy**: \( k = 1 \)
+- **Recommended practical range**: \( k = 3 \) to \( k = 5 \) for more robust results.
+
+
+

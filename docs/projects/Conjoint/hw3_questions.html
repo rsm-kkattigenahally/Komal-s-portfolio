@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Komal Nagaraj">
-<meta name="dcterms.date" content="2025-05-28">
+<meta name="dcterms.date" content="2025-05-29">
 
-<title>MLE and COnjoint Analysis – Komal’s Portfolio</title>
+<title>MLE and Conjoint Analysis – Komal’s Portfolio</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -198,7 +198,7 @@ window.Quarto = {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">MLE and COnjoint Analysis</h1>
+<h1 class="title">MLE and Conjoint Analysis</h1>
 </div>
 
 
@@ -215,7 +215,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 28, 2025</p>
+      <p class="date">May 29, 2025</p>
     </div>
   </div>
   
@@ -269,7 +269,7 @@ Note
 </div>
 <div id="callout-1" class="callout-1-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
-<div id="bd0522f4" class="cell" data-execution_count="1">
+<div id="18e3fd21" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -327,7 +327,7 @@ Note
 <span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulate for all respondents</span></span>
 <span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>conjoint_data <span class="op">=</span> pd.concat([sim_one(i) <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, n_peeps <span class="op">+</span> <span class="dv">1</span>)], ignore_index<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>conjoint_data</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-display" data-execution_count="22">
+<div class="cell-output cell-output-display" data-execution_count="8">
 <div>
 
 
@@ -457,12 +457,12 @@ Note
 <section id="preparing-the-data-for-estimation" class="level2">
 <h2 class="anchored" data-anchor-id="preparing-the-data-for-estimation">3. Preparing the Data for Estimation</h2>
 <p>The “hard part” of the MNL likelihood function is organizing the data, as we need to keep track of 3 dimensions (consumer <span class="math inline">\(i\)</span>, covariate <span class="math inline">\(k\)</span>, and product <span class="math inline">\(j\)</span>) instead of the typical 2 dimensions for cross-sectional regression models (consumer <span class="math inline">\(i\)</span> and covariate <span class="math inline">\(k\)</span>). The fact that each task for each respondent has the same number of alternatives (3) helps. In addition, we need to convert the categorical variables for brand and ads into binary variables.</p>
-<div id="39bfc64b" class="cell" data-execution_count="2">
+<div id="4c64242a" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.get_dummies(conjoint_data, columns<span class="op">=</span>[<span class="st">'brand'</span>, <span class="st">'ad'</span>], drop_first<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>bool_cols <span class="op">=</span> df.select_dtypes(include<span class="op">=</span><span class="st">'bool'</span>).columns</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>df[bool_cols] <span class="op">=</span> df[bool_cols].astype(<span class="bu">int</span>)</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>df.head()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-display" data-execution_count="23">
+<div class="cell-output cell-output-display" data-execution_count="9">
 <div>
 
 
@@ -540,7 +540,7 @@ Note
 <section id="estimation-via-maximum-likelihood" class="level2">
 <h2 class="anchored" data-anchor-id="estimation-via-maximum-likelihood">4. Estimation via Maximum Likelihood</h2>
 <p>Next we define the maximum likelihood function to find the <span class="math inline">\(\beta\)</span> values for each parameter.</p>
-<div id="dbf1fcea" class="cell" data-execution_count="3">
+<div id="a01164cf" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>X_cols <span class="op">=</span> [<span class="st">'price'</span>, <span class="st">'brand_N'</span>, <span class="st">'brand_P'</span>, <span class="st">'ad_Yes'</span>]</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> df[X_cols].values</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> df[<span class="st">'choice'</span>].values</span>
@@ -563,7 +563,7 @@ Note
 <span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-</span>ll</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Further, we use the scipy.optimize() function to find the MLEs for the 4 parameters as well as their standard errors (from the Hessian). We also estimate a 95% confidence interval for each parameter estimate.</p>
-<div id="3feeea6c" class="cell" data-execution_count="4">
+<div id="c0027f41" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"MLE Estimation of beta"</span>)</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.optimize <span class="im">import</span> minimize</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> scipy.stats <span class="im">as</span> stats</span>
@@ -609,7 +609,7 @@ ad_Yes: beta = -0.7724, SE = 0.0313, 95% CI = (-0.8337, -0.7111)</code></pre>
 P(\beta \mid \text{data}) \propto {P(\text{data} \mid \beta) \cdot P(\beta)}
 \]</span></p>
 <p>where <span class="math inline">\(P(\beta)\)</span> = Prior <span class="math inline">\(P(\text{data} \mid \beta)\)</span> = Likelihood <span class="math inline">\(P(\beta \mid \text{data})\)</span> = Posterior</p>
-<div id="fc911811" class="cell" data-execution_count="5">
+<div id="3a88210a" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n_alts <span class="op">=</span> <span class="dv">3</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>n_sets <span class="op">=</span> <span class="bu">int</span>(<span class="bu">len</span>(df) <span class="op">/</span> n_alts)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>n_params <span class="op">=</span> X.shape[<span class="dv">1</span>]</span>
@@ -668,7 +668,7 @@ ad_Yes: Beta = -0.7801, SD = 0.0918, 95% CI = (-0.9606, -0.5981)</code></pre>
 </div>
 </div>
 <p>Below is the trace plot of the algorithm, as well as the histogram of the posterior distribution for the price estimate.</p>
-<div id="07693915" class="cell" data-execution_count="6">
+<div id="0744997a" class="cell" data-execution_count="6">
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(posterior_samples)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -720,8 +720,8 @@ ad_Yes: Beta = -0.7801, SD = 0.0918, 95% CI = (-0.9606, -0.5981)</code></pre>
 <p>The trace plot for the price coefficient shows stable oscillations around a central value, indicating that the Markov Chain Monte Carlo (MCMC) sampler has converged and is mixing well. There is no upward or downward drift, suggesting the chain is sampling effectively from the posterior distribution.</p>
 <p>The corresponding posterior distribution is approximately normal, centered around -0.10. This confirms a strong negative effect of price on product choice — as price increases, the probability of selection decreases. The tight, symmetric shape of the distribution reflects high certainty in this estimate.</p>
 <p>The following table summarizes the estimates from MLE and Bayesian methods.</p>
-<div id="55ccbb4c" class="cell" data-execution_count="7">
-<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="28">
+<div id="7bec1512" class="cell" data-execution_count="7">
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="14">
 <table class="caption-top table table-sm table-striped small">
 <colgroup>
 <col style="width: 12%">
